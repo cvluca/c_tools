@@ -81,13 +81,13 @@ typedef struct stat {
     _pstat_t ps[2];
 } stat_t;
 
-void load__stat(_stat_t *s, FILE *fp)
+static void load__stat(_stat_t *s, FILE *fp)
 {
     fscanf(fp, "%s %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld",
             s->name, &s->user, &s->nice, &s->system, &s->idle, &s->iowait, &s->irq, &s->softirq, &s->steal, &s->guest, &s->guest_nice);
 }
 
-void load__pstat(_pstat_t *ps, FILE *fp)
+static void load__pstat(_pstat_t *ps, FILE *fp)
 {
     fscanf(fp, "%d %s %c %d %d %d %d %d %u %lu"
             "%lu %lu %lu %lu %lu %ld %ld %ld %ld %ld"
@@ -103,7 +103,7 @@ void load__pstat(_pstat_t *ps, FILE *fp)
             &ps->env_start, &ps->env_end, &ps->exit_code);
 }
 
-void print__stat(_stat_t *s)
+static void print__stat(_stat_t *s)
 {
     printf("\n"
            "0.  name       = %s\n"
@@ -120,7 +120,7 @@ void print__stat(_stat_t *s)
            s->name, s->user, s->nice, s->system, s->idle, s->iowait, s->irq, s->softirq, s->steal, s->guest, s->guest_nice);
 }
 
-void print__pstat(_pstat_t *ps)
+static void print__pstat(_pstat_t *ps)
 {
     printf( "\n"
             "1.  pid                   = %d\n"
@@ -184,6 +184,16 @@ void print__pstat(_pstat_t *ps)
 
 }
 
+static inline long long get_total_cpu_usage(_stat_t *stat)
+{
+    return stat->user + stat->nice + stat->system + stat->idle;
+}
+
+static inline long long get_proc_time(_pstat_t *stat)
+{
+    return stat->utime + stat->stime;
+}
+
 void init_stat(stat_t *stat)
 {
     char pfile[256];
@@ -206,16 +216,6 @@ void destroy_stat(stat_t *stat)
 {
     fclose(stat->s_fp);
     fclose(stat->ps_fp);
-}
-
-static inline long long get_total_cpu_usage(_stat_t *stat)
-{
-    return stat->user + stat->nice + stat->system + stat->idle;
-}
-
-static inline long long get_proc_time(_pstat_t *stat)
-{
-    return stat->utime + stat->stime;
 }
 
 // https://newbedev.com/how-to-calculate-the-cpu-usage-of-a-process-by-pid-in-linux-from-c
