@@ -5,7 +5,7 @@
 #define STAT_START 0
 #define STAT_END 1
 
-typedef struct _stat {
+typedef struct {
     char name[256];
     long long user; // Time spent in user mode.
     long long nice; // Time spent in user mode with low priority (nice).
@@ -19,7 +19,7 @@ typedef struct _stat {
     long long guest_nice; //  Time spent running a niced guest (virtual CPU for guest operating systems under the control of the Linux kernel).
 } _stat_t;
 
-typedef struct _pstat {
+typedef struct {
     int pid;
     char comm[16];
     char state;
@@ -74,7 +74,9 @@ typedef struct _pstat {
     int exit_code;
 } _pstat_t;
 
-typedef struct stat {
+typedef struct {
+    char s_path[256];
+    char ps_path[256];
     FILE *s_fp;
     FILE *ps_fp;
     _stat_t s[2];
@@ -194,28 +196,42 @@ static inline long long get_proc_time(_pstat_t *stat)
     return stat->utime + stat->stime;
 }
 
+static void print_cpu_stat(stat_t *stat, int cpu)
+{
+    FILE *s_fp = fopen(stat->s_path, "r");
+    cpu++;
+    do {
+        load__stat(&stat->s[0], s_fp);
+    } while (cpu--);
+    print__stat(&stat->s[0]);
+    fclose(s_fp);
+}
+
+static void print_pid_stat(stat_t *stat)
+{
+    FILE *ps_fp = fopen(stat->ps_path, "r");
+    load__pstat(&stat->ps[0], ps_fp);
+    print__pstat(&stat->ps[0]);
+    fclose(ps_fp);
+}
+
 void init_stat(stat_t *stat)
 {
     char pfile[256];
     pid_t pid = getpid();
-    stat->s_fp = fopen("/proc/stat", "r");
-    sprintf(pfile, "/proc/%d/stat", pid);
-    stat->ps_fp = fopen(pfile, "r");
+    strcpy(stat->s_path, "/proc/stat");
+    sprintf(stat->ps_path, "/proc/%d/stat", pid);
 }
 
 void load_stat(stat_t *stat, int offset)
 {
+    FILE *s_fp = fopen(stat->s_path, "r");
+    FILE *ps_fp = fopen(stat->ps_path, "r");
     if (offset < 0 || offset > 1) return;
-    load__stat(&stat->s[offset], stat->s_fp);
-    load__pstat(&stat->ps[offset], stat->ps_fp);
-    fseek(stat->s_fp, 0, SEEK_SET);
-    fseek(stat->ps_fp, 0, SEEK_SET);
-}
-
-void destroy_stat(stat_t *stat)
-{
-    fclose(stat->s_fp);
-    fclose(stat->ps_fp);
+    load__stat(&stat->s[offset], s_fp);
+    load__pstat(&stat->ps[offset], ps_fp);
+    fclose(s_fp);
+    fclose(ps_fp);
 }
 
 // https://newbedev.com/how-to-calculate-the-cpu-usage-of-a-process-by-pid-in-linux-from-c
@@ -226,6 +242,7 @@ float cpu_usage(stat_t *stat)
     long long proc_times1 = get_proc_time(&stat->ps[STAT_START]);
     long long proc_times2 = get_proc_time(&stat->ps[STAT_END]);
     long number_of_processors = sysconf(_SC_NPROCESSORS_ONLN);
+    printf("cpu_usage: %lld, %lld, %lld, %lld, %ld\n", total_cpu_usage1, total_cpu_usage2, proc_times1, proc_times2, number_of_processors);
     return number_of_processors * (proc_times2 - proc_times1) * 100 / (float) (total_cpu_usage2 - total_cpu_usage1);
 }
 
@@ -233,14 +250,21 @@ int main() {
     stat_t stat;
 
     init_stat(&stat);
+
+    print_cpu_stat(&stat, -1);
+    print_cpu_stat(&stat, 0);
+    print_cpu_stat(&stat, 1);
+    print_pid_stat(&stat);
     load_stat(&stat, STAT_START);
 
     for (int i = 0; i < 100000000; i++) { }
 
     load_stat(&stat, STAT_END);
-    destroy_stat(&stat);
-
     printf("cpu usage = %f%%\n", cpu_usage(&stat));
+    print_cpu_stat(&stat, -1);
+    print_cpu_stat(&stat, 0);
+    print_cpu_stat(&stat, 1);
+    print_pid_stat(&stat);
 
     return 0;
 }
