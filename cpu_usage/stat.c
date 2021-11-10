@@ -75,6 +75,7 @@ typedef struct {
 } _pstat_t;
 
 typedef struct {
+    int cpu;
     char s_path[256];
     char ps_path[256];
     FILE *s_fp;
@@ -87,6 +88,15 @@ static void load__stat(_stat_t *s, FILE *fp)
 {
     fscanf(fp, "%s %lld %lld %lld %lld %lld %lld %lld %lld %lld %lld",
             s->name, &s->user, &s->nice, &s->system, &s->idle, &s->iowait, &s->irq, &s->softirq, &s->steal, &s->guest, &s->guest_nice);
+}
+
+static void load_cpu__stat(_stat_t *s, int cpu, FILE *fp)
+{
+    if (cpu < 0) cpu = -1;
+    cpu++;
+    do {
+        load__stat(s, fp);
+    } while (cpu--);
 }
 
 static void load__pstat(_pstat_t *ps, FILE *fp)
@@ -199,10 +209,7 @@ static inline long long get_proc_time(_pstat_t *stat)
 static void print_cpu_stat(stat_t *stat, int cpu)
 {
     FILE *s_fp = fopen(stat->s_path, "r");
-    cpu++;
-    do {
-        load__stat(&stat->s[0], s_fp);
-    } while (cpu--);
+    load_cpu__stat(&stat->s[0], cpu, s_fp);
     print__stat(&stat->s[0]);
     fclose(s_fp);
 }
@@ -215,10 +222,11 @@ static void print_pid_stat(stat_t *stat)
     fclose(ps_fp);
 }
 
-void init_stat(stat_t *stat)
+void init_stat(stat_t *stat, int cpu)
 {
     char pfile[256];
     pid_t pid = getpid();
+    stat->cpu = cpu;
     strcpy(stat->s_path, "/proc/stat");
     sprintf(stat->ps_path, "/proc/%d/stat", pid);
 }
@@ -228,7 +236,7 @@ void load_stat(stat_t *stat, int offset)
     FILE *s_fp = fopen(stat->s_path, "r");
     FILE *ps_fp = fopen(stat->ps_path, "r");
     if (offset < 0 || offset > 1) return;
-    load__stat(&stat->s[offset], s_fp);
+    load_cpu__stat(&stat->s[offset], stat->cpu, s_fp);
     load__pstat(&stat->ps[offset], ps_fp);
     fclose(s_fp);
     fclose(ps_fp);
@@ -249,7 +257,7 @@ float cpu_usage(stat_t *stat)
 int main() {
     stat_t stat;
 
-    init_stat(&stat);
+    init_stat(&stat, -1);
 
     print_cpu_stat(&stat, -1);
     print_cpu_stat(&stat, 0);
